@@ -1,0 +1,38 @@
+name: pentube
+description: PenTube - YouTube without ads. Light on data and battery.
+publish_to: 'none'
+version: 1.0.0+1
+
+environment:
+  sdk: '>=3.3.0 <4.0.0'
+
+dependencies:
+  flutter:
+    sdk: flutter
+  flutter_localizations:
+    sdk: flutter
+  youtube_explode_dart: ^2.3.0
+  video_player: ^2.9.0
+  just_audio: ^0.9.40
+  audio_service: ^0.18.15
+  cached_network_image: ^3.4.0
+  shared_preferences: ^2.3.0
+  wakelock_plus: ^1.2.8
+
+dev_dependencies:
+  flutter_test:
+    sdk: flutter
+  flutter_launcher_icons: ^0.14.1
+
+flutter_launcher_icons:
+  android: true
+  ios: true
+  image_path: assets/icon/icon.png
+  remove_alpha_ios: true
+  adaptive_icon_background: '#FFFFFF'
+  adaptive_icon_foreground: assets/icon/icon_fg.png
+
+flutter:
+  uses-material-design: true
+  assets:
+    - assets/logo.png

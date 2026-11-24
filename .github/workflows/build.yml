@@ -1,0 +1,84 @@
+name: Build PenTube
+
+on:
+  push:
+    tags: ['v*']
+  workflow_dispatch:
+
+permissions:
+  contents: write
+
+jobs:
+  android:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-java@v4
+        with:
+          distribution: temurin
+          java-version: '17'
+      - uses: subosito/flutter-action@v2
+        with:
+          channel: stable
+          cache: true
+      - name: Generate platform folders
+        run: flutter create . --project-name pentube --org app.pentube --platforms=android,ios
+      - name: Patch (permissions, background audio, floating window)
+        run: python3 scripts/patch_platforms.py
+      - run: rm -rf test
+      - run: flutter pub get
+      - run: dart run flutter_launcher_icons
+      - name: Build APKs
+        run: |
+          flutter build apk --release
+          flutter build apk --release --split-per-abi
+          mkdir dist
+          cp build/app/outputs/flutter-apk/app-release.apk dist/PenTube-android-universal.apk
+          cp build/app/outputs/flutter-apk/app-arm64-v8a-release.apk dist/PenTube-android-arm64-v8a.apk
+          cp build/app/outputs/flutter-apk/app-armeabi-v7a-release.apk dist/PenTube-android-armeabi-v7a.apk
+          cp build/app/outputs/flutter-apk/app-x86_64-release.apk dist/PenTube-android-x86_64.apk
+      - uses: actions/upload-artifact@v4
+        with:
+          name: PenTube-android
+          path: dist/*.apk
+
+  ios:
+    runs-on: macos-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: subosito/flutter-action@v2
+        with:
+          channel: stable
+          cache: true
+      - run: flutter create . --project-name pentube --org app.pentube --platforms=android,ios
+      - run: python3 scripts/patch_platforms.py
+      - run: rm -rf test
+      - run: flutter pub get
+      - run: dart run flutter_launcher_icons
+      - name: Build unsigned IPA
+        run: |
+          flutter build ios --release --no-codesign
+          mkdir -p dist/Payload
+          cp -R build/ios/iphoneos/Runner.app dist/Payload/
+          cd dist && zip -qr PenTube-ios-unsigned.ipa Payload && rm -rf Payload
+      - uses: actions/upload-artifact@v4
+        with:
+          name: PenTube-ios
+          path: dist/*.ipa
+
+  release:
+    needs: [android, ios]
+    if: startsWith(github.ref, 'refs/tags/')
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/download-artifact@v4
+        with:
+          path: dist
+          merge-multiple: true
+      - uses: softprops/action-gh-release@v2
+        with:
+          name: PenTube ${{ github.ref_name }}
+          generate_release_notes: true
+          files: |
+            dist/*.apk
+            dist/*.ipa
