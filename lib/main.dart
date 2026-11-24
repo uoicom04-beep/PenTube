@@ -5,6 +5,7 @@ import 'package:flutter_localizations/flutter_localizations.dart';
 import 'core/settings.dart';
 import 'screens/shell.dart';
 import 'services/audio_handler.dart';
+import 'services/downloads.dart';
 import 'services/pip.dart';
 import 'services/store.dart';
 
@@ -16,6 +17,7 @@ Future<void> main() async {
 
   await Settings.I.load();
   await Store.I.load();
+  await Downloads.I.load();
   await Pip.init();
   audioHandler = await AudioService.init(
     builder: () => PenAudioHandler(),

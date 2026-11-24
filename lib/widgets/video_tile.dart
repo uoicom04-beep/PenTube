@@ -6,6 +6,7 @@ import '../core/fmt.dart';
 import '../core/settings.dart';
 import '../core/strings.dart';
 import '../screens/watch_screen.dart';
+import '../services/downloads.dart';
 import '../services/models.dart';
 import '../services/store.dart';
 
@@ -64,6 +65,9 @@ class VideoTile extends StatelessWidget {
       onSelected: (i) {
         if (i == 0) {
           Store.I.toggleSaved(v);
+        } else if (i == 2) {
+          final d = Downloads.I;
+          d.has(v.id) ? d.remove(v.id) : d.start(v);
         } else {
           Clipboard.setData(ClipboardData(text: 'https://youtu.be/${v.id}'));
           ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text(S.t('copied'))));
@@ -71,6 +75,7 @@ class VideoTile extends StatelessWidget {
       },
       itemBuilder: (_) => [
         PopupMenuItem(value: 0, child: Text(S.t('save'))),
+        PopupMenuItem(value: 2, child: Text(S.t(Downloads.I.has(v.id) ? 'removeDownload' : 'download'))),
         PopupMenuItem(value: 1, child: Text(S.t('copyLink'))),
       ],
     );

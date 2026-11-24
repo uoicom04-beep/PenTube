@@ -22,7 +22,7 @@ class PenAudioHandler extends BaseAudioHandler with SeekHandler {
 
   Future<void> load(String url, MediaItem item, {Duration start = Duration.zero}) async {
     mediaItem.add(item);
-    await _player.setAudioSource(AudioSource.uri(Uri.parse(url)), initialPosition: start);
+    await _player.setAudioSource(AudioSource.uri(url.startsWith('/') ? Uri.file(url) : Uri.parse(url)), initialPosition: start);
   }
 
   @override

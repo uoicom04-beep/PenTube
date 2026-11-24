@@ -34,6 +34,19 @@ if 'com.ryanheise.audioservice.AudioService' not in s:
     s = s.replace('</application>', svc + '</application>', 1)
 if 'xmlns:tools' not in s:
     s = s.replace('<manifest ', '<manifest xmlns:tools="http://schemas.android.com/tools" ', 1)
+# allow plain http to the on-device video proxy (127.0.0.1 only)
+xml = pathlib.Path('android/app/src/main/res/xml')
+xml.mkdir(parents=True, exist_ok=True)
+(xml / 'network_security_config.xml').write_text('''<?xml version="1.0" encoding="utf-8"?>
+<network-security-config>
+    <domain-config cleartextTrafficPermitted="true">
+        <domain includeSubdomains="false">127.0.0.1</domain>
+        <domain includeSubdomains="false">localhost</domain>
+    </domain-config>
+</network-security-config>
+''')
+if 'networkSecurityConfig' not in s:
+    s = s.replace('<application', '<application android:networkSecurityConfig="@xml/network_security_config"', 1)
 manifest.write_text(s)
 
 kt = glob.glob('android/app/src/main/**/MainActivity.kt', recursive=True)
@@ -113,6 +126,7 @@ if plist.exists():
     d['CFBundleDisplayName'] = 'PenTube'
     d['CFBundleName'] = 'PenTube'
     d['UIBackgroundModes'] = ['audio']
+    d['NSAppTransportSecurity'] = {'NSAllowsLocalNetworking': True}
     d['CFBundleLocalizations'] = ['en', 'th']
     plist.write_bytes(plistlib.dumps(d))
 

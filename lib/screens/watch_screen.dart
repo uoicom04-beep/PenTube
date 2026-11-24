@@ -1,4 +1,5 @@
 import 'dart:async';
+import 'dart:io';
 
 import 'package:audio_service/audio_service.dart';
 import 'package:cached_network_image/cached_network_image.dart';
@@ -12,6 +13,8 @@ import '../core/fmt.dart';
 import '../core/settings.dart';
 import '../core/strings.dart';
 import '../services/audio_handler.dart';
+import '../services/downloads.dart';
+import '../services/net.dart';
 import '../services/models.dart';
 import '../services/pip.dart';
 import '../services/store.dart';
@@ -31,6 +34,7 @@ class _WatchScreenState extends State<WatchScreen> with WidgetsBindingObserver {
   VideoPlayerController? _vc;
   List<MuxedStreamInfo> _muxed = const [];
   int _height = 0;
+  File? _local; // offline copy, if downloaded
 
   bool _loading = true;
   bool _audioMode = false; // user picked "listen only"
@@ -46,7 +50,7 @@ class _WatchScreenState extends State<WatchScreen> with WidgetsBindingObserver {
   int _gen = 0; // invalidates stale async work
   AppLifecycleState _life = AppLifecycleState.resumed;
 
-  bool get _audioPath => _audioMode || _bg || _muxed.isEmpty;
+  bool get _audioPath => _audioMode || _bg || (_muxed.isEmpty && _local == null);
 
   @override
   void initState() {
@@ -103,7 +107,8 @@ class _WatchScreenState extends State<WatchScreen> with WidgetsBindingObserver {
     await _disposeVideo();
     Store.I.addHistory(v);
     try {
-      _muxed = await Yt.muxed(v.id);
+      _local = Downloads.I.file(v.id);
+      _muxed = _local != null ? const [] : await Yt.muxed(v.id);
       if (gen != _gen || !mounted) return;
       if (_audioPath) {
         await _startAudio(start, gen);
@@ -134,7 +139,13 @@ class _WatchScreenState extends State<WatchScreen> with WidgetsBindingObserver {
   }
 
   Future<void> _startVideo(Duration start, int gen, bool autoplay) async {
-    final c = VideoPlayerController.networkUrl(_pick().url);
+    final VideoPlayerController c;
+    if (_local != null) {
+      c = VideoPlayerController.file(_local!);
+    } else {
+      final m = _pick();
+      c = VideoPlayerController.networkUrl(await Proxy.wrap(m.url, m.size.totalBytes, 'video/mp4'));
+    }
     await c.initialize();
     if (gen != _gen || !mounted) {
       await c.dispose();
@@ -150,11 +161,17 @@ class _WatchScreenState extends State<WatchScreen> with WidgetsBindingObserver {
   }
 
   Future<void> _startAudio(Duration start, int gen) async {
-    final a = await Yt.audio(_video.id, low: Settings.I.saver);
-    if (gen != _gen || !mounted) return;
+    String url;
+    if (_local != null) {
+      url = _local!.path;
+    } else {
+      final a = await Yt.audio(_video.id, low: Settings.I.saver);
+      if (gen != _gen || !mounted) return;
+      url = (await Proxy.wrap(a.url, a.size.totalBytes, 'audio/mp4')).toString();
+    }
     audioHandler.onCompleted = _onEnded;
     await audioHandler.load(
-      a.url.toString(),
+      url,
       MediaItem(
         id: _video.id,
         title: _video.title,
@@ -188,6 +205,11 @@ class _WatchScreenState extends State<WatchScreen> with WidgetsBindingObserver {
 
   Future<void> _onEnded() async {
     if (!Settings.I.autoplay || !mounted) return;
+    if (_local != null) {
+      final n = Downloads.I.items.where((r) => !_played.contains(r.id)).firstOrNull;
+      if (n != null) _goto(n);
+      return;
+    }
     if (_related.isEmpty) await _loadRelated();
     if (!mounted) return;
     final next = _related.where((r) => !_played.contains(r.id)).firstOrNull;
@@ -435,6 +457,33 @@ class _WatchScreenState extends State<WatchScreen> with WidgetsBindingObserver {
               label: Text(S.t('save')),
               onPressed: () => Store.I.toggleSaved(v),
             ),
+          ),
+          ListenableBuilder(
+            listenable: Downloads.I,
+            builder: (_, __) {
+              final d = Downloads.I;
+              final busy = d.active(v.id);
+              return ActionChip(
+                avatar: busy
+                    ? SizedBox(
+                        width: 18,
+                        height: 18,
+                        child: CircularProgressIndicator(strokeWidth: 2, value: d.progress[v.id]))
+                    : Icon(d.has(v.id) ? Icons.download_done : Icons.download, size: 18),
+                label: Text(busy
+                    ? '${((d.progress[v.id] ?? 0) * 100).round()}%'
+                    : S.t(d.has(v.id) ? 'downloaded' : 'download')),
+                onPressed: () {
+                  if (busy) {
+                    d.cancel(v.id);
+                  } else if (d.has(v.id)) {
+                    d.remove(v.id);
+                  } else {
+                    d.start(v);
+                  }
+                },
+              );
+            },
           ),
           ActionChip(
             avatar: const Icon(Icons.link, size: 18),
